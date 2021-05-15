@@ -6,6 +6,8 @@
 // ros
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
+#include <cv_bridge/cv_bridge.h>
+#include <image_transport/image_transport.h>
 
 // rpg quadrotor
 #include <autopilot/autopilot_helper.h>
@@ -44,7 +46,11 @@ class FlightPilot {
   ros::NodeHandle pnh_;
 
   // publisher
-
+  image_transport::Publisher rgb_pub;
+  image_transport::Publisher depth_pub;
+  image_transport::Publisher segmentation_pub;
+  image_transport::Publisher opticalflow_pub;
+  
   // subscriber
   ros::Subscriber sub_state_est_;
 

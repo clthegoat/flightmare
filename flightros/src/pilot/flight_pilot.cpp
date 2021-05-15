@@ -5,7 +5,7 @@ namespace flightros {
 FlightPilot::FlightPilot(const ros::NodeHandle &nh, const ros::NodeHandle &pnh)
   : nh_(nh),
     pnh_(pnh),
-    scene_id_(UnityScene::INDUSTRIAL),
+    scene_id_(UnityScene::INDUSTRIAL), //INDUSTRIAL (0), WAREHOUSE (1), GARAGE (2), NATUREFOREST (3)
     unity_ready_(false),
     unity_render_(false),
     receive_id_(0),
@@ -23,19 +23,29 @@ FlightPilot::FlightPilot(const ros::NodeHandle &nh, const ros::NodeHandle &pnh)
 
   // add mono camera
   rgb_camera_ = std::make_shared<RGBCamera>();
-  Vector<3> B_r_BC(0.0, 0.0, 0.3);
+  Vector<3> B_r_BC(0.0, 0.0, 1);
   Matrix<3, 3> R_BC = Quaternion(1.0, 0.0, 0.0, 0.0).toRotationMatrix();
   std::cout << R_BC << std::endl;
   rgb_camera_->setFOV(90);
   rgb_camera_->setWidth(720);
   rgb_camera_->setHeight(480);
   rgb_camera_->setRelPose(B_r_BC, R_BC);
+  // added
+  rgb_camera_->setPostProcesscing(
+    std::vector<bool>{true, true, true});  // depth, segmentation, optical flow
   quad_ptr_->addRGBCamera(rgb_camera_);
 
   // initialization
+  // Setup Quad
   quad_state_.setZero();
   quad_ptr_->reset(quad_state_);
 
+  // initialize publishers
+  image_transport::ImageTransport it(nh_);
+  rgb_pub = it.advertise("/rgb", 1);
+  depth_pub = it.advertise("/depth", 1);
+  segmentation_pub = it.advertise("/segmentation", 1);
+  opticalflow_pub = it.advertise("/opticalflow", 1);
 
   // initialize subscriber call backs
   sub_state_est_ = nh_.subscribe("flight_pilot/state_estimate", 1,
@@ -74,11 +84,64 @@ void FlightPilot::poseCallback(const nav_msgs::Odometry::ConstPtr &msg) {
       // collision happened
       ROS_INFO("COLLISION");
     }
+    cv::Mat img;
+
+    ros::Time timestamp = ros::Time::now();
+
+    rgb_camera_->getRGBImage(img);
+    sensor_msgs::ImagePtr rgb_msg =
+      cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
+    rgb_msg->header.stamp = timestamp;
+    rgb_pub.publish(rgb_msg);
+
+    rgb_camera_->getDepthMap(img);
+    sensor_msgs::ImagePtr depth_msg =
+      cv_bridge::CvImage(std_msgs::Header(), "32FC1", img).toImageMsg();
+    depth_msg->header.stamp = timestamp;
+    depth_pub.publish(depth_msg);
+
+    rgb_camera_->getSegmentation(img);
+    sensor_msgs::ImagePtr segmentation_msg =
+      cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
+    segmentation_msg->header.stamp = timestamp;
+    segmentation_pub.publish(segmentation_msg);
+
+    rgb_camera_->getOpticalFlow(img);
+    sensor_msgs::ImagePtr opticflow_msg =
+      cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
+    opticflow_msg->header.stamp = timestamp;
+    opticalflow_pub.publish(opticflow_msg);
   }
 }
 
 void FlightPilot::mainLoopCallback(const ros::TimerEvent &event) {
-  // empty
+  // cv::Mat img;
+
+  // ros::Time timestamp = ros::Time::now();
+
+  // rgb_camera_->getRGBImage(img);
+  // sensor_msgs::ImagePtr rgb_msg =
+  //   cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
+  // rgb_msg->header.stamp = timestamp;
+  // rgb_pub.publish(rgb_msg);
+
+  // rgb_camera_->getDepthMap(img);
+  // sensor_msgs::ImagePtr depth_msg =
+  //   cv_bridge::CvImage(std_msgs::Header(), "32FC1", img).toImageMsg();
+  // depth_msg->header.stamp = timestamp;
+  // depth_pub.publish(depth_msg);
+
+  // rgb_camera_->getSegmentation(img);
+  // sensor_msgs::ImagePtr segmentation_msg =
+  //   cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
+  // segmentation_msg->header.stamp = timestamp;
+  // segmentation_pub.publish(segmentation_msg);
+
+  // rgb_camera_->getOpticalFlow(img);
+  // sensor_msgs::ImagePtr opticflow_msg =
+  //   cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
+  // opticflow_msg->header.stamp = timestamp;
+  // opticalflow_pub.publish(opticflow_msg);
 }
 
 bool FlightPilot::setUnity(const bool render) {
